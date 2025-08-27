@@ -12,17 +12,17 @@
 
 ```
 hrv-drowsy/
-├─ data/                    # 원본/학습/테스트 데이터 (Git에 업로드하지 않음)
+├─ data/                    # 원본/학습/테스트 데이터
 │  ├─ train/               # 학습용 CSV
 │  └─ test/                # 추론용 CSV
 ├─ models/
-│  └─ model.pkl            # 학습된 모델 번들 (Git에 업로드하지 않음)
+│  └─ model.pkl            # 학습된 모델
 ├─ outputs/                # 추론 결과(csv, plot 저장)
 ├─ utils.py                # 공통 유틸 (데이터 로딩, HRV feature, 후처리, 시각화)
 ├─ train.py                # 모델 학습 스크립트
 ├─ test.py                 # 추론/평가 스크립트
 ├─ requirements.txt        # 의존성 목록 (버전 고정)
-├─ .gitignore              # data/models/outputs/ 등 제외
+├─ .gitignore              # data/models/outputs/ 제외
 └─ README.md
 ```
 
@@ -41,7 +41,7 @@ hrv-drowsy/
 
 ### 데이터 다운로드
 1. [NSRR (National Sleep Research Resource)](https://sleepdata.org/datasets/shhs) 회원가입 및 **데이터 접근 승인** 필요  
-2. 다운받은 CSV를를 `data/train/`, `data/test/` 에 배치
+2. 다운받은 CSV를 `data/train/`, `data/test/` 에 배치
 
 ### 인용 (Citation)
 - Zhang GQ, et al. The National Sleep Research Resource: towards a sleep data commons. JAMIA. 2018;25(10):1351–1358. https://doi.org/10.1093/jamia/ocy064
