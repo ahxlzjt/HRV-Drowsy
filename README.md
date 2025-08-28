@@ -131,9 +131,63 @@ python test.py \
 **Output:**
 - `outputs/<filename>_pred.csv` (prob, y_pred, y_pred_processed, threshold, etc.), plots (optional)
 
-### 3) Evaluation (Metrics)
+### 3) Metrics
 
-Batch evaluation of sleep onset timing errors.
+`metrics.py` provides two types of evaluation:
+- **Window-level Confusion Metrics**: Window-unit binary classification performance (Accuracy/Precision/Recall/F1)
+  - `--mode train`: applies threshold/m-of-n/cooldown post-processing stored in model bundle
+  - `--mode test`: uses fixed threshold and **no post-processing** by default (can be overridden)
+- **Sleep Onset Timing (Test Only)**: **Onset timing error** close to real usage (MAE, Median AE, RMSE, Mean Bias, Success@K)
+
+#### 3.1 Window-level Confusion Metrics
+
+**Train (Apply optimal parameters after CV):**
+
+```bash
+python metrics.py \
+  --model_path models/model.pkl \
+  --input data/train \
+  --mode train \
+  --glob "*.csv" \
+  --save_table outputs/train_eval.csv
+```
+
+Output:
+```
+===== Window Confusion Matrix (train) =====
+Accuracy:         89.7%
+Precision:        88.4%
+Recall:           86.1%
+F1-score:         87.2%
+[Saved] outputs/train_eval.csv
+```
+
+**Test (Default: fixed thr, no post-processing):**
+
+```bash
+python metrics.py \
+  --model_path models/model.pkl \
+  --input data/test \
+  --mode test \
+  --glob "*.csv" \
+  --save_table outputs/test_eval.csv
+```
+
+Output:
+```
+===== Window Confusion Matrix (test) =====
+Accuracy:         86.3%
+Precision:        84.7%
+Recall:           82.9%
+F1-score:         83.8%
+[Saved] outputs/test_eval.csv
+```
+
+If needed, test can also override threshold/post-processing with `--thr --post_m --post_n --cooldown_w` for comparison on same criteria.
+
+#### 3.2 Sleep Onset Timing (Test Only)
+
+Batch sleep onset timing error evaluation.
 
 ```bash
 python metrics.py \
@@ -148,7 +202,21 @@ python metrics.py \
 
 **Metrics:**
 - MAE, Median AE, RMSE, Mean Bias
-- Success@5/10/15/`tol`(minutes)
+- Success@5/10/15/`tol` (minutes)
+
+Output:
+```
+===== Sleep Onset Timing (test) =====
+Valid onset pairs: 22/22
+MAE (min):        8.48
+Median AE (min):  7.58
+RMSE (min):       10.92
+Mean Bias (min):  -0.78   # + late prediction, - early prediction
+Success@5  min:    31.8%
+Success@10 min:    68.2%
+Success@15 min:    90.9%
+[Saved] outputs/onset_eval.csv
+```
 
 ### 4) Real-time Trigger Transmission (Offline Stream → TCP)
 
