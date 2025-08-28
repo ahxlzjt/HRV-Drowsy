@@ -15,7 +15,8 @@ venv/
 # Data / Models / Outputs
 data/
 models/
-outputs/
+outputs/onset_test.csv
+outputs/onset_train.csv
 
 # OS
 .DS_Store
