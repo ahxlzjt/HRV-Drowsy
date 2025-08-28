@@ -71,6 +71,34 @@ def _read_time_stage(csv_path: str):
     m = np.isfinite(t)
     return t[m], stage[m]
 
+# ---------- Confusion helpers ----------
+def _confusion_from_window_labels(gt_lab: np.ndarray, pred_lab: np.ndarray) -> dict:
+    """
+    gt_lab: {0,1,-1} 중 0/1만 유효, -1은 미라벨로 제외
+    pred_lab: {0,1}
+    반환: TP/FP/TN/FN, Acc/Prec/Rec/F1, N_labeled
+    """
+    gt_lab = np.asarray(gt_lab)
+    pred_lab = np.asarray(pred_lab)
+    valid = np.isin(gt_lab, [0, 1]) & np.isin(pred_lab, [0, 1])
+    g = gt_lab[valid]; p = pred_lab[valid]
+    n_lab = int(len(g))
+    if n_lab == 0:
+        return {"TP":0,"FP":0,"TN":0,"FN":0,"Acc":float("nan"),
+                "Precision":float("nan"),"Recall":float("nan"),"F1":float("nan"),
+                "N_labeled":0}
+
+    tp = int(np.sum((p == 1) & (g == 1)))
+    tn = int(np.sum((p == 0) & (g == 0)))
+    fp = int(np.sum((p == 1) & (g == 0)))
+    fn = int(np.sum((p == 0) & (g == 1)))
+
+    acc = (tp + tn) / n_lab if n_lab > 0 else float("nan")
+    prec = tp / (tp + fp) if (tp + fp) > 0 else float("nan")
+    rec  = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
+    f1   = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else float("nan")
+    return {"TP":tp,"FP":fp,"TN":tn,"FN":fn,"Acc":acc,"Precision":prec,"Recall":rec,"F1":f1,"N_labeled":n_lab}
+
 # ---------- 첫 온셋 ----------
 def _first_onset_time_from_raw(time_s, stage_tokens):
     if len(stage_tokens) == 0:
@@ -234,6 +262,23 @@ def _eval_one_csv(model_bundle, csv_path, mode, thr_override, best_thr_path,
             print(f"[{csv_path.name}] thr={info['thr']:.4f}, prob(mean/p95/max)={info['prob_mean']:.4f}/{info['prob_p95']:.4f}/{info['prob_max']:.4f}, "
                   f"pos={info['pos_before']}")
 
+    # --- Confusion (window-level) ---
+    # 모델 번들에 저장된 기준으로 GT 라벨링
+    awake_ratio = float(model_bundle["windowing"].get("awake_ratio", 0.75))
+    drowsy_ratio = float(model_bundle["windowing"].get("drowsy_ratio", 0.75))
+    gt_win = build_windows(df, win=win, step=step, awake_ratio=awake_ratio,
+                           drowsy_ratio=drowsy_ratio, label_from_stage=True)
+    # 길이 정합 (동일 win/step이면 동일 순서/길이여야 함. 혹시 몰라 min 처리)
+    L = min(len(gt_win), len(y_pred))
+    if L == 0 or "Label" not in gt_win.columns:
+        conf = {"TP":0,"FP":0,"TN":0,"FN":0,"Acc":float("nan"),
+                "Precision":float("nan"),"Recall":float("nan"),"F1":float("nan"),
+                "N_labeled":0}
+    else:
+        gt_lab = gt_win["Label"].to_numpy()[:L]
+        pred_lab = y_pred[:L]
+        conf = _confusion_from_window_labels(gt_lab, pred_lab)
+    
     # GT & Pred onset
     t_raw, st_raw = _read_time_stage(str(csv_path))
     gt_onset = _first_onset_time_from_raw(t_raw, st_raw)
@@ -245,6 +290,10 @@ def _eval_one_csv(model_bundle, csv_path, mode, thr_override, best_thr_path,
         "gt_onset_min": (None if gt_onset is None else gt_onset/60.0),
         "pred_onset_min": (None if pr_onset is None else pr_onset/60.0),
         "delta_min": (None if (gt_onset is None or pr_onset is None) else (pr_onset-gt_onset)/60.0),
+        # Confusion per-file
+        "TP": conf["TP"], "FP": conf["FP"], "TN": conf["TN"], "FN": conf["FN"],
+        "Acc": conf["Acc"], "Precision": conf["Precision"], "Recall": conf["Recall"], "F1": conf["F1"],
+        "N_labeled": conf["N_labeled"],
     }
 
 # ---------- 전체 평가 ----------
@@ -291,6 +340,28 @@ def evaluate_onset(input_path, model_path, mode="test",
     succ15  = float(np.mean(abs_err<=15)) if n_valid else np.nan
     succTol = float(np.mean(abs_err<=tol_minutes)) if n_valid else np.nan
 
+    # ----- Window Confusion (aggregate) -----
+    for c in ["TP","FP","TN","FN","N_labeled"]:
+        if c not in tab.columns:
+            tab[c] = 0
+    agg_tp = int(np.nansum(tab["TP"]))
+    agg_fp = int(np.nansum(tab["FP"]))
+    agg_tn = int(np.nansum(tab["TN"]))
+    agg_fn = int(np.nansum(tab["FN"]))
+    agg_n  = int(np.nansum(tab["N_labeled"]))
+
+    agg_acc  = (agg_tp + agg_tn) / agg_n if agg_n > 0 else float("nan")
+    agg_prec = agg_tp / (agg_tp + agg_fp) if (agg_tp + agg_fp) > 0 else float("nan")
+    agg_rec  = agg_tp / (agg_tp + agg_fn) if (agg_tp + agg_fn) > 0 else float("nan")
+    agg_f1   = (2 * agg_prec * agg_rec / (agg_prec + agg_rec)) if (agg_prec + agg_rec) > 0 else float("nan")
+
+    print(f"\n===== Window Confusion Matrix ({mode}) =====")
+    print(f"Labeled windows:  {agg_n}")
+    print(f"TP: {agg_tp} | FP: {agg_fp} | TN: {agg_tn} | FN: {agg_fn}")
+    print(f"Accuracy:        {agg_acc*100:5.1f}%")
+    print(f"Precision:       {agg_prec*100:5.1f}%")
+    print(f"Recall:          {agg_rec*100:5.1f}%")
+    print(f"F1-score:        {agg_f1*100:5.1f}%")
     print(f"\n===== Sleep Onset Timing ({mode}) =====")
     print(f"Valid onset pairs: {n_valid}/{n_total}")
     print(f"MAE (min):        {mae:.2f}")

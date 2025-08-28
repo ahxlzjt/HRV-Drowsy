@@ -64,7 +64,7 @@ def main(args):
         gkf = GroupKFold(n_splits=min(args.folds, len(np.unique(groups))))
         probs_all, y_all = [], []
         for tr_idx, va_idx in gkf.split(X, y_tr, groups):
-            from common import fit_scaler_and_model
+            from utils import fit_scaler_and_model
             scaler, clf = fit_scaler_and_model(
                 X[tr_idx], y_tr[tr_idx],
                 n_estimators=args.n_estimators,
@@ -84,7 +84,7 @@ def main(args):
         print(f"[CV] best threshold = {best_thr:.3f} (F1={np.max(f1s):.3f})")
 
     # 5) 최종 학습(전체 데이터)
-    from common import fit_scaler_and_model
+    from utils import fit_scaler_and_model
     scaler, clf = fit_scaler_and_model(
         X, y_tr,
         n_estimators=args.n_estimators,
